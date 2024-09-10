@@ -20,7 +20,8 @@ st.title("Análisis de Datos y Modelado Predictivo")
 
 # Paso 1: Elegir si el usuario quiere hacer EDA o Modelado
 option = st.radio("¿Qué te gustaría hacer?", ("Análisis Exploratorio de Datos (EDA)", "Modelado Predictivo"))
-
+# Aquí asegúrate de que date_column está definido al principio
+date_column = None
 # Subida de archivo CSV
 uploaded_file = st.file_uploader("Sube tus datos (CSV)", type="csv")
 
@@ -36,10 +37,9 @@ if uploaded_file is not None:
 
     st.write("Datos cargados:")
     st.write(df.head())
-    # Aquí asegúrate de que date_column está definido al principio
-    date_column = None
-
     
+
+
     # Opción 1: Análisis Exploratorio de Datos (EDA)
     if option == "Análisis Exploratorio de Datos (EDA)":
         st.write("### Análisis Exploratorio de Datos")
