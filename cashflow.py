@@ -9,7 +9,7 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from statsmodels.tsa.statespace.sarimax import SARIMAX
@@ -20,10 +20,9 @@ st.title("Análisis de Datos y Modelado Predictivo")
 
 # Paso 1: Elegir si el usuario quiere hacer EDA o Modelado
 option = st.radio("¿Qué te gustaría hacer?", ("Análisis Exploratorio de Datos (EDA)", "Modelado Predictivo"))
+
 # Aquí asegúrate de que date_column está definido al principio
 date_column = None
-# Subida de archivo CSV
-uploaded_file = st.file_uploader("Sube tus datos (CSV)", type="csv")
 
 # Subida de archivo CSV o Excel
 uploaded_file = st.file_uploader("Sube tus datos (CSV o Excel)", type=["csv", "xlsx"])
@@ -37,8 +36,6 @@ if uploaded_file is not None:
 
     st.write("Datos cargados:")
     st.write(df.head())
-    
-
 
     # Opción 1: Análisis Exploratorio de Datos (EDA)
     if option == "Análisis Exploratorio de Datos (EDA)":
@@ -190,258 +187,226 @@ if uploaded_file is not None:
                                            ["Regresión Lineal", "Árbol de Decisión", "Bosque Aleatorio", 
                                             "K-Nearest Neighbors", "Regresión Polinómica", 
                                             "ARIMA", "Exponential Smoothing (ETS)", "SARIMA"])
-        # Inicializar el diccionario de predicciones fuera del condicional / Asegurarse de que el diccionario `predictions_dict` está definido antes de entrenar los modelos
-        if 'predictions_dict' not in locals():
-            predictions_dict = {}  # Inicializar el diccionario si no ha sido creado
 
-        # Paso del código que permite seleccionar los modelos y entrenar
-        if st.button("Entrenar Modelos"):
-            # Entrenamiento de los modelos seleccionados
-            for model_choice in model_choices:
-                st.write(f"### Entrenando el modelo: {model_choice}")
+            # Inicializar el diccionario de modelos entrenados fuera del condicional
+            trained_models_dict = {}
 
-                # Modelos tradicionales
-                if model_choice == "Regresión Lineal":
-                    model = LinearRegression()
-                    model.fit(X_train, y_train)
-                    prediction = model.predict([X_test])
-                    predictions_dict[model_choice] = prediction
+            # Paso del código que permite seleccionar los modelos y entrenar
+            if st.button("Entrenar Modelos"):
+                # Entrenamiento de los modelos seleccionados
+                for model_choice in model_choices:
+                    st.write(f"### Entrenando el modelo: {model_choice}")
 
-                elif model_choice == "Árbol de Decisión":
-                    model = DecisionTreeRegressor()
-                    model.fit(X_train, y_train)
-                    prediction = model.predict([X_test])
-                    predictions_dict[model_choice] = prediction
+                    # Modelos tradicionales
+                    if model_choice == "Regresión Lineal":
+                        model = LinearRegression()
+                        model.fit(X_train, y_train)
+                        trained_models_dict[model_choice] = model
 
-                elif model_choice == "Bosque Aleatorio":
-                    model = RandomForestRegressor()
-                    model.fit(X_train, y_train)
-                    prediction = model.predict([X_test])
-                    predictions_dict[model_choice] = prediction
+                    elif model_choice == "Árbol de Decisión":
+                        model = DecisionTreeRegressor()
+                        model.fit(X_train, y_train)
+                        trained_models_dict[model_choice] = model
 
-                elif model_choice == "K-Nearest Neighbors":
-                    model = KNeighborsRegressor(n_neighbors=5)
-                    model.fit(X_train, y_train)
-                    prediction = model.predict([X_test])
-                    predictions_dict[model_choice] = prediction
+                    elif model_choice == "Bosque Aleatorio":
+                        model = RandomForestRegressor()
+                        model.fit(X_train, y_train)
+                        trained_models_dict[model_choice] = model
 
-                elif model_choice == "Regresión Polinómica":
-                    poly = PolynomialFeatures(degree=2)
-                    X_poly_train = poly.fit_transform(X_train)
+                    elif model_choice == "K-Nearest Neighbors":
+                        model = KNeighborsRegressor(n_neighbors=5)
+                        model.fit(X_train, y_train)
+                        trained_models_dict[model_choice] = model
+
+                    elif model_choice == "Regresión Polinómica":
+                        poly = PolynomialFeatures(degree=2)
+                        X_poly_train = poly.fit_transform(X_train)
+                        model = LinearRegression()
+                        model.fit(X_poly_train, y_train)
+                        trained_models_dict[model_choice] = (model, poly)
+
+                    # Modelos de series temporales
+                    elif model_choice == "ARIMA":
+                        p = st.slider("Selecciona el valor de p (autoregresión)", 0, 5, 1, key="p_arima")
+                        d = st.slider("Selecciona el valor de d (diferenciación)", 0, 2, 1, key="d_arima")
+                        q = st.slider("Selecciona el valor de q (media móvil)", 0, 5, 1, key="q_arima")
+                        model_arima = ARIMA(df[target][:test_index], order=(p, d, q))
+                        model_fit = model_arima.fit()
+                        trained_models_dict[model_choice] = model_fit
+
+                    elif model_choice == "Exponential Smoothing (ETS)":
+                        model_ets = ExponentialSmoothing(df[target][:test_index], trend="add", seasonal="add", seasonal_periods=12)
+                        model_fit = model_ets.fit()
+                        trained_models_dict[model_choice] = model_fit
+
+                    elif model_choice == "SARIMA":
+                        p = st.slider("Selecciona el valor de p (autoregresión)", 0, 5, 1, key="p_sarima")
+                        d = st.slider("Selecciona el valor de d (diferenciación)", 0, 2, 1, key="d_sarima")
+                        q = st.slider("Selecciona el valor de q (media móvil)", 0, 5, 1, key="q_sarima")
+                        P = st.slider("Selecciona el valor de P (estacionalidad)", 0, 5, 1, key="P_sarima")
+                        D = st.slider("Selecciona el valor de D (diferenciación estacional)", 0, 2, 1, key="D_sarima")
+                        Q = st.slider("Selecciona el valor de Q (media móvil estacional)", 0, 5, 1, key="Q_sarima")
+                        m = st.slider("Selecciona el período estacional (m)", 0, 12, 12, key="m_sarima")
+                        model_sarima = SARIMAX(df[target][:test_index], order=(p, d, q), seasonal_order=(P, D, Q, m))
+                        model_fit = model_sarima.fit()
+                        trained_models_dict[model_choice] = model_fit
+
+                st.write("Modelos entrenados correctamente.")
+
+            # Mostrar los resultados de los modelos entrenados
+            st.write("### Resultados de los Modelos Seleccionados")
+
+            real_values = [y_test]
+            model_predictions = []
+
+            for model_choice, model in trained_models_dict.items():
+                if model_choice in ["Regresión Polinómica"]:
+                    model, poly = trained_models_dict[model_choice]
                     X_poly_test = poly.transform([X_test])
-                    model = LinearRegression()
-                    model.fit(X_poly_train, y_train)
-                    prediction = model.predict(X_poly_test)
-                    predictions_dict[model_choice] = prediction
-
-                # Modelos de series temporales
-                elif model_choice == "ARIMA":
-                    p = st.slider("Selecciona el valor de p (autoregresión)", 0, 5, 1, key="p_arima")
-                    d = st.slider("Selecciona el valor de d (diferenciación)", 0, 2, 1, key="d_arima")
-                    q = st.slider("Selecciona el valor de q (media móvil)", 0, 5, 1, key="q_arima")
-                    model_arima = ARIMA(df[target][:test_index], order=(p, d, q))
-                    model_fit = model_arima.fit()
-                    forecast_arima = model_fit.forecast(steps=1)
-                    predictions_dict[model_choice] = forecast_arima
-
-                elif model_choice == "Exponential Smoothing (ETS)":
-                    model_ets = ExponentialSmoothing(df[target][:test_index], trend="add", seasonal="add", seasonal_periods=12)
-                    model_fit = model_ets.fit()
-                    forecast_ets = model_fit.forecast(steps=1)
-                    predictions_dict[model_choice] = forecast_ets
-
-                elif model_choice == "SARIMA":
-                    p = st.slider("Selecciona el valor de p (autoregresión)", 0, 5, 1, key="p_sarima")
-                    d = st.slider("Selecciona el valor de d (diferenciación)", 0, 2, 1, key="d_sarima")
-                    q = st.slider("Selecciona el valor de q (media móvil)", 0, 5, 1, key="q_sarima")
-                    P = st.slider("Selecciona el valor de P (estacionalidad)", 0, 5, 1, key="P_sarima")
-                    D = st.slider("Selecciona el valor de D (diferenciación estacional)", 0, 2, 1, key="D_sarima")
-                    Q = st.slider("Selecciona el valor de Q (media móvil estacional)", 0, 5, 1, key="Q_sarima")
-                    m = st.slider("Selecciona el período estacional (m)", 0, 12, 12, key="m_sarima")
-                    model_sarima = SARIMAX(df[target][:test_index], order=(p, d, q), seasonal_order=(P, D, Q, m))
-                    model_fit = model_sarima.fit()
-                    forecast_sarima = model_fit.forecast(steps=1)
-                    predictions_dict[model_choice] = forecast_sarima
-
-            st.write("Modelos entrenados correctamente.")
-
-            # Mostrar la selección de modelos para hacer predicciones futuras
-            selected_models = st.multiselect("Selecciona los modelos que deseas usar para predecir", list(predictions_dict.keys()))
-
-            if selected_models:
-                st.write("### Predicción de un valor no conocido")
-
-                # Verificar si es una serie temporal
-                if date_column is not None:
-                    # Para series temporales, el usuario introduce una fecha futura
-                    future_date = st.date_input("Selecciona la fecha que deseas predecir")
-                    st.write(f"Prediciendo el valor para la fecha: {future_date}")
-                    for model_choice in selected_models:
-                        st.write(f"### Predicción con {model_choice}")
-
-                        # Verificar si las predicciones están correctamente en el diccionario
-                        if model_choice in predictions_dict:
-                            # Extraer el valor de predicción, dependiendo del tipo de dato
-                            prediction = predictions_dict[model_choice]
-                            if isinstance(prediction, pd.Series):
-                                prediction_value = prediction.iloc[0]
-                            elif isinstance(prediction, np.ndarray):
-                                prediction_value = prediction[0]
-                            else:
-                                prediction_value = prediction
-
-                            # Mostrar la predicción
-                            st.write(f"Predicción: {prediction_value}")
+                    prediction_value = model.predict(X_poly_test)[0]
+                elif model_choice in ["ARIMA", "Exponential Smoothing (ETS)", "SARIMA"]:
+                    try:
+                        if model_choice == "ARIMA" or model_choice == "SARIMA":
+                            forecast = model.get_forecast(steps=1)
+                            prediction_value = forecast.predicted_mean.iloc[0]
                         else:
-                            st.write(f"No se encontró predicción para el modelo {model_choice}")
+                            prediction_value = model.forecast(steps=1)[0]
 
-        # Mostrar los resultados de los modelos entrenados
-        st.write("### Resultados de los Modelos Seleccionados")
+                    except Exception as e:
+                        st.write(f"Error al predecir con {model_choice}: {e}")
+                        prediction_value = None
 
-        # Listas para almacenar los valores reales y predicciones para cada modelo
-        real_values = [y_test]
-        model_predictions = []
+                else:
+                    prediction_value = model.predict([X_test])[0]
 
-        # Dentro del bucle for que procesa las predicciones:
-        for model_choice, prediction in predictions_dict.items():
-            # Asegurarse de que `prediction` es un valor escalar y no una matriz o Series de numpy
-            if isinstance(prediction, pd.Series):
-                # Para pandas Series, acceder con `.iloc[0]`
-                prediction_value = prediction.iloc[0]
-            elif isinstance(prediction, np.ndarray):
-                # Para numpy array, acceder con el índice [0]
-                prediction_value = prediction[0]
-            else:
-                # Si es un solo valor (float o int), simplemente se usa el valor
-                prediction_value = prediction
+                y_test_value = y_test if not isinstance(y_test, pd.Series) else y_test.item()
 
-            # Asegurarse de que y_test es un escalar si es un Series
-            y_test_value = y_test if not isinstance(y_test, pd.Series) else y_test.item()
+                mae = mean_absolute_error([y_test_value], [prediction_value])
+                mse = mean_squared_error([y_test_value], [prediction_value])
 
-            # Cálculo del MAE y MSE
-            mae = mean_absolute_error([y_test_value], [prediction_value])
-            mse = mean_squared_error([y_test_value], [prediction_value])
-            
-            # Cálculo de la diferencia porcentual
-            diff_percent = abs((y_test_value - prediction_value) / y_test_value) * 100
-            
-            # Mostrar resultados para cada modelo
-            st.write(f"**{model_choice}:**")
-            st.write(f"Valor Real: {y_test_value}")
-            st.write(f"Predicción: {prediction_value}")
-            st.write(f"Error Absoluto Medio (MAE): {mae:.4f}")
-            st.write(f"Error Cuadrático Medio (MSE): {mse:.4f}")
-            st.write(f"Diferencia porcentual: {diff_percent:.2f}%")
-            st.write("---")
-            
-            # Agregar predicciones a la lista
-            model_predictions.append(prediction_value)
+                diff_percent = abs((y_test_value - prediction_value) / y_test_value) * 100
 
-        # Gráfico comparativo
-        st.write("### Comparación Gráfica de las Predicciones con el Valor Real")
+                st.write(f"**{model_choice}:**")
+                st.write(f"Valor Real: {y_test_value}")
+                st.write(f"Predicción: {prediction_value}")
+                st.write(f"Error Absoluto Medio (MAE): {mae:.4f}")
+                st.write(f"Error Cuadrático Medio (MSE): {mse:.4f}")
+                st.write(f"Diferencia porcentual: {diff_percent:.2f}%")
+                st.write("---")
 
-        # Crear un dataframe para gráficos
-        df_graph = pd.DataFrame({
-            'Modelo': list(predictions_dict.keys()),
-            'Predicciones': model_predictions,
-            'Valor Real': real_values * len(predictions_dict)  # Replicar el valor real para cada modelo
-        })
+                model_predictions.append(prediction_value)
 
-        # Gráfico de barras para comparar las predicciones con el valor real
-        st.bar_chart(df_graph.set_index('Modelo'))
+            # Gráfico comparativo
+            st.write("### Comparación Gráfica de las Predicciones con el Valor Real")
+            df_graph = pd.DataFrame({
+                'Modelo': list(trained_models_dict.keys()),
+                'Predicciones': model_predictions,
+                'Valor Real': real_values * len(trained_models_dict)
+            })
 
-        # Gráfico de dispersión interactivo usando Plotly
-        fig = px.scatter(df_graph, x='Modelo', y='Predicciones', labels={'Predicciones':'Predicción'},
-                        title="Predicciones de cada Modelo vs Valor Real")
-        fig.add_scatter(x=df_graph['Modelo'], y=df_graph['Valor Real'], mode='lines+markers', name='Valor Real')
-        st.plotly_chart(fig)
+            st.bar_chart(df_graph.set_index('Modelo'))
 
-        # Gráfico de líneas usando Matplotlib para análisis más visual
-        st.write("### Gráfico de Líneas - Comparación de Predicciones")
-        plt.figure(figsize=(10, 5))
-        plt.plot(df_graph['Modelo'], df_graph['Predicciones'], label='Predicciones', marker='o')
-        plt.axhline(y=y_test, color='r', linestyle='--', label='Valor Real')
-        plt.title('Comparación de Predicciones por Modelo')
-        plt.xlabel('Modelo')
-        plt.ylabel('Valor Predicho')
-        plt.legend()
-        st.pyplot(plt)
+            # Gráfico de dispersión interactivo usando Plotly
+            fig = px.scatter(df_graph, x='Modelo', y='Predicciones', labels={'Predicciones': 'Predicción'}, title="Predicciones de cada Modelo vs Valor Real")
+            fig.add_scatter(x=df_graph['Modelo'], y=df_graph['Valor Real'], mode='lines+markers', name='Valor Real')
+            st.plotly_chart(fig)
 
+            # Gráfico de líneas usando Matplotlib para análisis más visual
+            st.write("### Gráfico de Líneas - Comparación de Predicciones")
+            plt.figure(figsize=(10, 5))
+            plt.plot(df_graph['Modelo'], df_graph['Predicciones'], label='Predicciones', marker='o')
+            plt.axhline(y=y_test, color='r', linestyle='--', label='Valor Real')
+            plt.title('Comparación de Predicciones por Modelo')
+            plt.xlabel('Modelo')
+            plt.ylabel('Valor Predicho')
+            plt.legend()
+            st.pyplot(plt)
 
-            # Sección: Predicción de un valor no conocido
-        st.write("### Predicción de un valor no conocido")
+# Predicción de un valor no conocido
+st.write("### Predicción de un valor no conocido")
 
+# Asegurarse de que el diccionario `trained_models_dict` esté definido correctamente
+if 'trained_models_dict' not in locals():
+    trained_models_dict = {}
 
-# Asegurarse de que el diccionario `predictions_dict` está definido antes de las predicciones
-if 'predictions_dict' not in locals():
-    predictions_dict = {}  # Definir si no ha sido entrenado
-
-# Seleccionar modelos previamente entrenados
-selected_models = st.multiselect("Selecciona los modelos que deseas usar para predecir", list(predictions_dict.keys()))
+# Omitimos el uso del selectbox si los modelos ya han sido entrenados
+st.write("Seleccionando automáticamente los modelos previamente entrenados")
 
 # Verificar si es una serie temporal
 if date_column is not None:
-    # Para series temporales, el usuario introduce una fecha futura
     st.write("Esta es una serie temporal. Introduce una fecha futura para hacer una predicción.")
     future_date = st.date_input("Selecciona la fecha que deseas predecir")
-    
-    # Mostrar el futuro valor seleccionado
-    st.write(f"Prediciendo el valor para la fecha: {future_date}")
-    
-    # Hacer predicciones con los modelos seleccionados
-    for model_choice in selected_models:
-        st.write(f"### Predicción con {model_choice}")
-        
-        if model_choice == "ARIMA":
-            # Utilizamos el modelo ARIMA previamente entrenado para predecir el siguiente valor
-            prediction = predictions_dict[model_choice].get_prediction(start=len(df[target]), end=len(df[target]) + 1).predicted_mean[0]
-        
-        elif model_choice == "Exponential Smoothing (ETS)":
-            # Utilizamos el modelo ETS previamente entrenado para predecir
-            prediction = predictions_dict[model_choice].forecast(steps=1)[0]
-        
-        elif model_choice == "SARIMA":
-            # Utilizamos el modelo SARIMA previamente entrenado para predecir
-            prediction = predictions_dict[model_choice].get_forecast(steps=1).predicted_mean[0]
-        
-        st.write(f"Predicción del modelo {model_choice} para la fecha {future_date}: {prediction}")
+
+    if st.button("Predecir con fecha futura"):
+        st.write(f"Prediciendo el valor para la fecha: {future_date}")
+
+        for model_choice, model in trained_models_dict.items():
+            st.write(f"### Predicción con {model_choice}")
+
+            if model_choice == "ARIMA":
+                prediction = model.get_forecast(steps=1).predicted_mean[0]
+            elif model_choice == "Exponential Smoothing (ETS)":
+                prediction = model.forecast(steps=1)[0]
+            elif model_choice == "SARIMA":
+                prediction = model.get_forecast(steps=1).predicted_mean[0]
+
+            st.write(f"Predicción del modelo {model_choice} para la fecha {future_date}: {prediction}")
 
 else:
-    # Para datos no temporales, el usuario introduce los valores para las variables predictoras
     st.write("Introduce los valores para las variables predictoras del nuevo dato")
-    
+
     # Crear inputs dinámicos para cada una de las variables predictoras
     new_data = []
     for feature in features:
         value = st.number_input(f"Introduce un valor para {feature}")
         new_data.append(value)
-    
-    # Convertir la entrada en un DataFrame para hacer predicciones
-    new_data = np.array(new_data).reshape(1, -1)
-    
-    # Hacer predicciones con los modelos seleccionados
-    for model_choice in selected_models:
-        st.write(f"### Predicción con {model_choice}")
-        
-        if model_choice == "Regresión Lineal":
-            prediction = predictions_dict[model_choice].predict(new_data)[0]
-        
-        elif model_choice == "Árbol de Decisión":
-            prediction = predictions_dict[model_choice].predict(new_data)[0]
-        
-        elif model_choice == "Bosque Aleatorio":
-            prediction = predictions_dict[model_choice].predict(new_data)[0]
-        
-        elif model_choice == "K-Nearest Neighbors":
-            prediction = predictions_dict[model_choice].predict(new_data)[0]
-        
-        elif model_choice == "Regresión Polinómica":
-            # Si se seleccionó la regresión polinómica, debemos transformar las entradas
-            poly = PolynomialFeatures(degree=2)
-            new_data_poly = poly.fit_transform(new_data)
-            prediction = predictions_dict[model_choice].predict(new_data_poly)[0]
-        
-        st.write(f"Predicción del modelo {model_choice} para el nuevo dato: {prediction}")
 
+    # Botón para entrenar los modelos y predecir
+    if st.button("Entrenar y Predecir con nuevo dato"):
+        new_data = np.array(new_data).reshape(1, -1)
 
+        # Entrenar de nuevo los modelos con el valor ingresado
+        trained_models_dict = {}
 
+        # Entrenamiento de los modelos seleccionados
+        for model_choice in model_choices:
+            st.write(f"### Entrenando y prediciendo con el modelo: {model_choice}")
+
+            # Modelos tradicionales
+            if model_choice == "Regresión Lineal":
+                model = LinearRegression()
+                model.fit(X, y)  # Entrenamos nuevamente
+                trained_models_dict[model_choice] = model
+                prediction = model.predict(new_data)[0]
+                st.write(f"Predicción del modelo {model_choice} para el nuevo dato: {prediction}")
+
+            elif model_choice == "Árbol de Decisión":
+                model = DecisionTreeRegressor()
+                model.fit(X, y)  # Entrenamos nuevamente
+                trained_models_dict[model_choice] = model
+                prediction = model.predict(new_data)[0]
+                st.write(f"Predicción del modelo {model_choice} para el nuevo dato: {prediction}")
+
+            elif model_choice == "Bosque Aleatorio":
+                model = RandomForestRegressor()
+                model.fit(X, y)  # Entrenamos nuevamente
+                trained_models_dict[model_choice] = model
+                prediction = model.predict(new_data)[0]
+                st.write(f"Predicción del modelo {model_choice} para el nuevo dato: {prediction}")
+
+            elif model_choice == "K-Nearest Neighbors":
+                model = KNeighborsRegressor(n_neighbors=5)
+                model.fit(X, y)  # Entrenamos nuevamente
+                trained_models_dict[model_choice] = model
+                prediction = model.predict(new_data)[0]
+                st.write(f"Predicción del modelo {model_choice} para el nuevo dato: {prediction}")
+
+            elif model_choice == "Regresión Polinómica":
+                poly = PolynomialFeatures(degree=2)
+                X_poly = poly.fit_transform(X)
+                model = LinearRegression()
+                model.fit(X_poly, y)  # Entrenamos nuevamente
+                trained_models_dict[model_choice] = (model, poly)
+                new_data_poly = poly.transform(new_data)
+                prediction = model.predict(new_data_poly)[0]
+                st.write(f"Predicción del modelo {model_choice} para el nuevo dato: {prediction}")
